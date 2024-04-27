@@ -1,0 +1,98 @@
+//Michael Rejo
+desc:Transpose Global MIDI
+options: gmem = globalController
+slider1:0<-12,12,1>-
+slider2:1<-16,16,1>-
+slider3:0<0,127,1>-
+slider4:127<0,127,1>-
+in_pin:none
+out_pin:none
+@init
+notebuf = 0; 
+buflen = 0;
+last_transpose = 0;
+last_mult = 1;
+last_samplepos = 0;
+@slider
+slider1 = gmem[0];  
+@block
+slider1 = gmem[0];
+samplepos = play_position*srate;
+samplechg = samplepos-last_samplepos;
+samplechg < -samplesblock/2.0 || samplechg > samplesblock*3.0/2.0 ?
+(
+  buflen = 0; 
+);
+last_samplepos = samplepos;
+
+slider1|0 != last_transpose || slider2 != last_mult ?
+(
+  last_transpose = slider1|0;
+  last_mult = slider2;
+
+  i = 0;
+  loop
+  (
+    buflen,    
+
+    n = notebuf[4*i]|0; 
+    c = notebuf[4*i+1]|0; 
+    v = notebuf[4*i+2]|0;
+    t = notebuf[4*i+3]|0; 
+
+    midisend(0, $x80|c, t); 
+    
+    t = (n*last_mult+last_transpose)|0; 
+    t < 0 ? t = 0 : t > 127 ? t = 127;
+    midisend(0, $x90|c, (v*256)|t); 
+    notebuf[4*i+3] = t;
+ 
+    i = i+1;
+  );
+);
+
+while 
+(
+  midirecv(offs, m1, m2) ?
+  (
+    s = m1&$xF0;
+    s == $x90 || s == $x80 ? 
+    (
+      n = m2&$xFF;
+   
+      n >= slider3 && n <= slider4 ?
+      (
+  c = m1&$xF; 
+        v = (m2&$xFF00)/256;
+        t = (n*last_mult+last_transpose)|0; 
+        t < 0 ? t = 0 : t > 127 ? t = 127;
+        m2 = m2+t-n; 
+
+        i = -1;
+        while 
+        (
+          i = i+1;
+          i < buflen && (notebuf[4*i]|0 != n || notebuf[4*i+1]|0 != c);
+        );
+
+        (s == $x90 && v > 0) ? 
+        (
+          notebuf[4*i] = n;
+          notebuf[4*i+1] = c;
+          notebuf[4*i+2] = v;
+          notebuf[4*i+3] = t;
+          i == buflen ? buflen = buflen+1;
+        ) 
+        :
+        (
+          i < buflen ?
+          (
+            memcpy(notebuf+4*i, notebuf+4*(i+1), 4*(buflen-i-1));  
+            buflen = buflen-1;
+          );
+        );
+      );
+    );
+    midisend(offs, m1, m2);
+  );
+);

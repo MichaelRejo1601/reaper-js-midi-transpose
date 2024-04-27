@@ -1,0 +1,11 @@
+//Michael Rejo
+desc:Transpose Global MIDI (Controller)
+options: gmem = globalController
+slider1:0<-12,12,1>transpose semitones
+//because no audio just midi
+in_pin:none
+out_pin:none
+@init
+gmem[0] = 0;
+@slider
+gmem[0] = slider1;
